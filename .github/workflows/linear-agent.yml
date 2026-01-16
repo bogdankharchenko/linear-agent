@@ -1,0 +1,102 @@
+name: Linear Agent - Implement
+
+on:
+  workflow_dispatch:
+    inputs:
+      agent_session_id:
+        description: 'Linear agent session ID'
+        required: true
+        type: string
+      ticket_id:
+        description: 'Linear ticket identifier (e.g., ABC-123)'
+        required: true
+        type: string
+      ticket_title:
+        description: 'Ticket title'
+        required: true
+        type: string
+      ticket_description:
+        description: 'Ticket description'
+        required: false
+        type: string
+        default: ''
+      ticket_context:
+        description: 'JSON with comments, links, parent, attachments'
+        required: false
+        type: string
+        default: '{}'
+      branch_name:
+        description: 'Branch name to use'
+        required: true
+        type: string
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Git
+        run: |
+          git config user.name "linear-code-agent[bot]"
+          git config user.email "linear-code-agent[bot]@users.noreply.github.com"
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are implementing a ticket from Linear.
+
+            ## Ticket: ${{ inputs.ticket_id }}
+            **Title:** ${{ inputs.ticket_title }}
+
+            **Description:**
+            ${{ inputs.ticket_description }}
+
+            **Additional Context:**
+            ```json
+            ${{ inputs.ticket_context }}
+            ```
+
+            ## Instructions
+
+            ### Step 1: Read Project Guidelines
+            - Read CLAUDE.md if it exists for project-specific guidance
+            - Analyze the codebase to understand patterns and conventions
+
+            ### Step 2: Create Branch
+            - Create a new git branch: `${{ inputs.branch_name }}`
+            - Switch to this branch
+
+            ### Step 3: Implement the Feature
+            - Read the ticket requirements carefully
+            - Implement EXACTLY what the ticket asks for
+            - Do not add extra features or improvements
+            - Follow existing code patterns in the codebase
+
+            ### Step 4: Create Pull Request
+            - Commit all changes with message: "${{ inputs.ticket_id }}: ${{ inputs.ticket_title }}"
+            - Push the branch
+            - Create PR with title: "${{ inputs.ticket_id }}: ${{ inputs.ticket_title }}"
+            - In PR body, include:
+              - Summary of changes
+              - Link to Linear ticket: https://linear.app/issue/${{ inputs.ticket_id }}
+              - "Closes ${{ inputs.ticket_id }}"
+
+            Focus on producing clean, working code that fits naturally into this codebase.
+          claude_args: '--allowedTools "Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(npx:*),Bash(yarn:*),Bash(pnpm:*),Bash(composer:*),Bash(php:*),Bash(python:*),Bash(pip:*),Bash(go:*),Bash(cargo:*),Bash(make:*),Bash(ls:*),Bash(cat:*),Bash(find:*),Bash(mkdir:*),Bash(rm:*),Bash(cp:*),Bash(mv:*),Bash(echo:*),Bash(test:*),Read,Write,Edit,MultiEdit,NotebookEdit,Glob,Grep,WebFetch,WebSearch,TodoWrite,Task"'
+        env:
+          GH_TOKEN: ${{ github.token }}

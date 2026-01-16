@@ -1,0 +1,23 @@
+name = "linear-code-agent"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+ENVIRONMENT = "production"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "linear-code-agent"
+database_id = "<your-database-id>"  # Replace with your D1 database ID
+
+# For local development
+[env.dev]
+name = "linear-code-agent-dev"
+
+[env.dev.vars]
+ENVIRONMENT = "development"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "linear-code-agent-dev"
+database_id = "<your-dev-database-id>"

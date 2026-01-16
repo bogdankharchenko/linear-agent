@@ -1,0 +1,27 @@
+{
+  "name": "linear-code-agent",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --config wrangler.production.toml",
+    "db:migrate": "wrangler d1 migrations apply linear-code-agent --remote --config wrangler.production.toml",
+    "db:migrate:local": "wrangler d1 migrations apply linear-code-agent --local",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@linear/sdk": "^25.0.0",
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.6.5",
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "@vitest/coverage-istanbul": "^2.1.8",
+    "typescript": "^5.3.0",
+    "vitest": "^2.1.8",
+    "wrangler": "^4.59.2"
+  }
+}
