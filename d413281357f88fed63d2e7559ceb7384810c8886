@@ -1,0 +1,47 @@
+migrations/0006_oauth_refresh_tokens.sql
+  c7580f9c28df5bcb 1-4
+src/handlers/session-created.ts
+  c7580f9c28df5bcb 24-25,31,52-64
+src/handlers/linear-webhook.ts
+  c7580f9c28df5bcb 68-80
+src/__tests__/db.test.ts
+  c7580f9c28df5bcb 116-117
+src/__tests__/oauth-security.test.ts
+  c7580f9c28df5bcb 22-23
+src/handlers/session-prompted.ts
+  c7580f9c28df5bcb 26-27
+.github/workflows/linear-agent.yml
+  c7580f9c28df5bcb 60
+src/handlers/inbox-notification.ts
+  c7580f9c28df5bcb 62
+src/index.ts
+  c7580f9c28df5bcb 5,152-154,189-193,196-197,200-201,204,233-241
+src/handlers/github-webhook.ts
+  c7580f9c28df5bcb 135,137
+src/__tests__/session-handlers.test.ts
+  c7580f9c28df5bcb 38-39
+src/__tests__/linear-service.test.ts
+  c7580f9c28df5bcb 292-293
+src/services/linear.ts
+  c7580f9c28df5bcb 1,3-7,10-11,15-16,19,21-148,179-185,194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.4",
+  "base_commit_sha": "d413281357f88fed63d2e7559ceb7384810c8886",
+  "prompts": {
+    "c7580f9c28df5bcb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6785ee4c-ba67-457f-88cc-f33daf2969b7",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Bogdan Kharchenko <scriptor@gmail.com>",
+      "messages": [],
+      "total_additions": 231,
+      "total_deletions": 35,
+      "accepted_lines": 219,
+      "overriden_lines": 0
+    }
+  }
+}
