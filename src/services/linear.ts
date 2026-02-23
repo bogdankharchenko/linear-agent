@@ -1,17 +1,151 @@
-import type { IssueContext, LinearAgentActivity } from '../types';
+import type { IssueContext, LinearAgentActivity, Bindings } from '../types';
+
+interface OAuthTokenRow {
+  access_token: string;
+  refresh_token: string | null;
+  expires_at: string | null;
+}
 
 /**
- * Get OAuth token for a workspace from database
+ * Get OAuth token for a workspace from database.
+ * Automatically refreshes expired tokens if a refresh_token is available.
  */
 export async function getOAuthToken(
   db: D1Database,
-  workspaceId: string
+  workspaceId: string,
+  env?: Pick<Bindings, 'LINEAR_CLIENT_ID' | 'LINEAR_CLIENT_SECRET'>
 ): Promise<string | null> {
   const result = await db
-    .prepare('SELECT access_token FROM oauth_tokens WHERE workspace_id = ?')
+    .prepare('SELECT access_token, refresh_token, expires_at FROM oauth_tokens WHERE workspace_id = ?')
     .bind(workspaceId)
-    .first<{ access_token: string }>();
-  return result?.access_token || null;
+    .first<OAuthTokenRow>();
+
+  if (!result) return null;
+
+  // Check if token is expired and we have a refresh token
+  if (result.refresh_token && result.expires_at && env) {
+    const expiresAt = new Date(result.expires_at).getTime();
+    const now = Date.now();
+    // Refresh 5 minutes before actual expiry to avoid race conditions
+    const bufferMs = 5 * 60 * 1000;
+
+    if (now >= expiresAt - bufferMs) {
+      console.log(`OAuth token expired for workspace ${workspaceId}, refreshing...`);
+      const refreshed = await refreshOAuthToken(
+        db,
+        workspaceId,
+        result.refresh_token,
+        env.LINEAR_CLIENT_ID,
+        env.LINEAR_CLIENT_SECRET
+      );
+      if (refreshed) {
+        return refreshed;
+      }
+      // If refresh failed, try the existing token anyway (might still work)
+      console.error(`Token refresh failed for workspace ${workspaceId}, trying existing token`);
+    }
+  }
+
+  return result.access_token;
+}
+
+/**
+ * Refresh all tokens that are expired or expiring soon.
+ * Intended to be called from a cron trigger.
+ */
+export async function refreshAllTokens(
+  db: D1Database,
+  clientId: string,
+  clientSecret: string
+): Promise<{ refreshed: number; failed: number }> {
+  const bufferMs = 5 * 60 * 1000;
+  const threshold = new Date(Date.now() + bufferMs).toISOString();
+
+  const rows = await db
+    .prepare(
+      `SELECT workspace_id, refresh_token, expires_at FROM oauth_tokens
+       WHERE refresh_token IS NOT NULL AND expires_at IS NOT NULL AND expires_at <= ?`
+    )
+    .bind(threshold)
+    .all<{ workspace_id: string; refresh_token: string; expires_at: string }>();
+
+  let refreshed = 0;
+  let failed = 0;
+
+  for (const row of rows.results) {
+    const result = await refreshOAuthToken(
+      db, row.workspace_id, row.refresh_token, clientId, clientSecret
+    );
+    if (result) {
+      refreshed++;
+    } else {
+      failed++;
+    }
+  }
+
+  return { refreshed, failed };
+}
+
+/**
+ * Refresh an OAuth token using the refresh token
+ * Linear uses refresh token rotation - both tokens are replaced
+ */
+async function refreshOAuthToken(
+  db: D1Database,
+  workspaceId: string,
+  refreshToken: string,
+  clientId: string,
+  clientSecret: string
+): Promise<string | null> {
+  try {
+    const response = await fetch('https://api.linear.app/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`OAuth token refresh failed (${response.status}): ${errorText}`);
+      return null;
+    }
+
+    const data = await response.json() as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+    };
+
+    // Calculate new expiry
+    const expiresAt = data.expires_in
+      ? new Date(Date.now() + data.expires_in * 1000).toISOString()
+      : null;
+
+    // Store the new tokens (Linear uses rotation - old tokens are invalidated)
+    await db.prepare(
+      `UPDATE oauth_tokens
+       SET access_token = ?, refresh_token = ?, expires_at = ?, updated_at = datetime('now')
+       WHERE workspace_id = ?`
+    ).bind(
+      data.access_token,
+      data.refresh_token || null,
+      expiresAt,
+      workspaceId
+    ).run();
+
+    console.log(`OAuth token refreshed for workspace ${workspaceId}`);
+    return data.access_token;
+  } catch (error) {
+    console.error(`OAuth token refresh error for workspace ${workspaceId}:`, error);
+    return null;
+  }
 }
 
 /**
@@ -42,7 +176,13 @@ export class LinearService {
     });
 
     if (!response.ok) {
-      throw new Error(`Linear API error: ${response.status}`);
+      let errorBody = '';
+      try {
+        errorBody = await response.text();
+      } catch {
+        // ignore if text() not available
+      }
+      throw new Error(`Linear API error: ${response.status}${errorBody ? ` - ${errorBody}` : ''}`);
     }
 
     const json = (await response.json()) as {
@@ -51,7 +191,7 @@ export class LinearService {
     };
 
     if (json.errors?.length) {
-      throw new Error(`Linear GraphQL error: ${json.errors[0].message}`);
+      throw new Error(`Linear GraphQL error: ${json.errors.map(e => e.message).join(', ')}`);
     }
 
     return json.data as T;

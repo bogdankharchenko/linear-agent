@@ -23,8 +23,8 @@ export async function handleSessionPrompted(
     `User prompt in session ${sessionId}: "${userMessage.substring(0, 100)}..."`
   );
 
-  // Get OAuth token for this workspace
-  const oauthToken = await getOAuthToken(c.env.DB, organizationId);
+  // Get OAuth token for this workspace (auto-refreshes if expired)
+  const oauthToken = await getOAuthToken(c.env.DB, organizationId, c.env);
   if (!oauthToken) {
     console.error(`No OAuth token found for workspace ${organizationId}`);
     return;

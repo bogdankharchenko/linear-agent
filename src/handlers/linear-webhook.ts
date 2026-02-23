@@ -65,6 +65,19 @@ export async function handleLinearWebhook(
     return c.json({ status: 'ok' });
   } catch (error) {
     console.error('Error handling Linear webhook:', error);
+    // Log error to database for debugging
+    try {
+      const sessionId = isAgentSessionWebhook(payload)
+        ? payload.agentSession.id
+        : undefined;
+      await db.logEvent(c.env.DB, {
+        agentSessionId: sessionId,
+        eventType: 'webhook_error',
+        message: `Error handling ${payload.type}/${(payload as { action?: string }).action}: ${String(error)}`,
+      });
+    } catch {
+      // Don't let error logging failure mask the original error
+    }
     // Still return 200 to prevent retries - we've already marked as processed
     return c.json({ status: 'error', message: String(error) });
   }

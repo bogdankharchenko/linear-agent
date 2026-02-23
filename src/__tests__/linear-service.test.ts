@@ -289,6 +289,8 @@ describe('getOAuthToken', () => {
         CREATE TABLE oauth_tokens (
           workspace_id TEXT PRIMARY KEY,
           access_token TEXT NOT NULL,
+          refresh_token TEXT,
+          expires_at TEXT,
           scope TEXT,
           created_at TEXT DEFAULT (datetime('now')),
           updated_at TEXT DEFAULT (datetime('now'))

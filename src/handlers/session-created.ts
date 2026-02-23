@@ -21,25 +21,14 @@ export async function handleSessionCreated(
     `New agent session ${sessionId} for issue ${issue.identifier} in team ${teamId}`
   );
 
-  // Get OAuth token for this workspace
-  const oauthToken = await getOAuthToken(c.env.DB, organizationId);
+  // Get OAuth token for this workspace (auto-refreshes if expired)
+  const oauthToken = await getOAuthToken(c.env.DB, organizationId, c.env);
   if (!oauthToken) {
     console.error(`No OAuth token found for workspace ${organizationId}`);
     return;
   }
 
-  // Initialize services
-  const github = new GitHubAppService(
-    c.env.GITHUB_APP_ID,
-    c.env.GITHUB_APP_PRIVATE_KEY
-  );
-  const linear = new LinearService(oauthToken);
-  const workflow = new WorkflowService(github, linear, c.env.DB);
-
-  // Acknowledge quickly (within 10 seconds requirement)
-  await linear.sendThought(sessionId, 'Looking at this issue...');
-
-  // Log the event
+  // Log the event first (before any API calls that might fail)
   await db.logEvent(c.env.DB, {
     agentSessionId: sessionId,
     eventType: 'session_created',
@@ -52,6 +41,27 @@ export async function handleSessionCreated(
       workspaceId: organizationId,
     },
   });
+
+  // Initialize services
+  const github = new GitHubAppService(
+    c.env.GITHUB_APP_ID,
+    c.env.GITHUB_APP_PRIVATE_KEY
+  );
+  const linear = new LinearService(oauthToken);
+  const workflow = new WorkflowService(github, linear, c.env.DB);
+
+  // Acknowledge quickly (within 10 seconds requirement)
+  try {
+    await linear.sendThought(sessionId, 'Looking at this issue...');
+  } catch (error) {
+    console.error(`Failed to send thought for session ${sessionId}:`, error);
+    await db.logEvent(c.env.DB, {
+      agentSessionId: sessionId,
+      eventType: 'error',
+      message: `Failed to send thought: ${String(error)}`,
+    });
+    throw error;
+  }
 
   // Check if team is configured
   const config = await db.getTeamConfigByWorkspace(

@@ -132,9 +132,9 @@ async function handleWorkflowRun(
     }
   }
 
-  // Get OAuth token for Linear API calls
+  // Get OAuth token for Linear API calls (auto-refreshes if expired)
   const oauthToken = workflowRun.linear_workspace_id
-    ? await getOAuthToken(c.env.DB, workflowRun.linear_workspace_id)
+    ? await getOAuthToken(c.env.DB, workflowRun.linear_workspace_id, c.env)
     : null;
 
   if (!oauthToken) {

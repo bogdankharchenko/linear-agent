@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Bindings } from './types';
 import { handleLinearWebhook } from './handlers/linear-webhook';
 import { handleGitHubWebhook } from './handlers/github-webhook';
+import { refreshAllTokens } from './services/linear';
 
 // Create Hono app with typed bindings
 const app = new Hono<{ Bindings: Bindings }>();
@@ -146,7 +147,12 @@ app.get('/oauth/callback', async (c) => {
     `, 400);
   }
 
-  const data = await response.json() as { access_token: string; scope?: string };
+  const data = await response.json() as {
+    access_token: string;
+    refresh_token?: string;
+    expires_in?: number;
+    scope?: string;
+  };
 
   // Get the workspace ID using the access token
   const orgResponse = await fetch('https://api.linear.app/graphql', {
@@ -180,15 +186,22 @@ app.get('/oauth/callback', async (c) => {
     `, 400);
   }
 
+  // Calculate expiry timestamp
+  const expiresAt = data.expires_in
+    ? new Date(Date.now() + data.expires_in * 1000).toISOString()
+    : null;
+
   // Store the token in the database
   await c.env.DB.prepare(
-    `INSERT INTO oauth_tokens (workspace_id, access_token, scope)
-     VALUES (?, ?, ?)
+    `INSERT INTO oauth_tokens (workspace_id, access_token, refresh_token, expires_at, scope)
+     VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(workspace_id) DO UPDATE SET
        access_token = excluded.access_token,
+       refresh_token = excluded.refresh_token,
+       expires_at = excluded.expires_at,
        scope = excluded.scope,
        updated_at = datetime('now')`
-  ).bind(workspaceId, data.access_token, data.scope || '').run();
+  ).bind(workspaceId, data.access_token, data.refresh_token || null, expiresAt, data.scope || '').run();
 
   console.log(`OAuth token stored for workspace ${workspaceName} (${workspaceId})`);
 
@@ -217,5 +230,12 @@ app.all('*', (c) => {
   return c.json({ error: 'Not found' }, 404);
 });
 
-// Export for Cloudflare Workers
-export default app;
+// Export for Cloudflare Workers with scheduled handler
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: ScheduledEvent, env: Bindings, _ctx: ExecutionContext) {
+    console.log('Cron: refreshing OAuth tokens...');
+    const result = await refreshAllTokens(env.DB, env.LINEAR_CLIENT_ID, env.LINEAR_CLIENT_SECRET);
+    console.log(`Cron: refreshed ${result.refreshed}, failed ${result.failed}`);
+  },
+};

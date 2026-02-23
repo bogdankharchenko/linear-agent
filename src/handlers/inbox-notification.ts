@@ -59,7 +59,7 @@ export async function handleInboxNotification(
     return;
   }
 
-  const oauthToken = await getOAuthToken(c.env.DB, activeWorkflow.linear_workspace_id);
+  const oauthToken = await getOAuthToken(c.env.DB, activeWorkflow.linear_workspace_id, c.env);
   if (!oauthToken) {
     console.error(`No OAuth token found for workspace ${activeWorkflow.linear_workspace_id}`);
     return;
